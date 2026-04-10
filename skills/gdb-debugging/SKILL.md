@@ -239,10 +239,10 @@ gdb-cli command --session abc123 "thread apply all bt"
 Commands like `run`, `start`, `continue`, `step`, `next` block until:
 - Program hits a breakpoint
 - Program exits
-- Timeout is reached (default: 30s)
+- Timeout is reached (default: 90s)
 - User interrupts with `interrupt`
 
-Only use `--timeout` when you expect the program to run longer than 30 seconds (e.g., long-running tests, slow startup).
+Only use `--timeout` when you expect the program to run longer than 90 seconds (e.g., long-running tests, slow startup).
 
 ## Structured Output
 

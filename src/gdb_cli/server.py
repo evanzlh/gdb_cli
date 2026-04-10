@@ -130,7 +130,7 @@ class GdbSession:
 
         return "Interrupt signal sent"
 
-    def execute(self, command: str, timeout: float = 30.0, max_length: Optional[int] = None) -> dict:
+    def execute(self, command: str, timeout: float = 90.0, max_length: Optional[int] = None) -> dict:
         """Execute a GDB command and block until prompt returns.
 
         This naturally handles async commands (run, continue) - when
@@ -274,7 +274,7 @@ class GDBServer:
             elif cmd == "execute":
                 session_id = request.get("session_id")
                 command = request.get("command")
-                timeout = request.get("timeout", 30.0)
+                timeout = request.get("timeout", 90.0)
                 max_length = request.get("max_length")  # None if not specified
                 session = self._get_session(session_id)
                 result = session.execute(command, timeout=timeout, max_length=max_length)

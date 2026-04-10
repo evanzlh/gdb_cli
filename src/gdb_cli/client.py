@@ -17,7 +17,7 @@ DEFAULT_SOCKET_NAME = "gdb-cli.sock"
 class GDBClient:
     """Client for communicating with GDB RPC server."""
 
-    DEFAULT_TIMEOUT = 30
+    DEFAULT_TIMEOUT = 90
     CONNECT_TIMEOUT = 5
 
     def __init__(self, socket_path: Optional[Path] = None, timeout: Optional[float] = None):
