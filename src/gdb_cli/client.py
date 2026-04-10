@@ -82,13 +82,21 @@ class GDBClient:
             "startup_timeout": startup_timeout,
         })
 
-    def execute(self, session_id: str, command: str, timeout: Optional[float] = None) -> dict:
-        """Execute a GDB command."""
+    def execute(self, session_id: str, command: str, timeout: Optional[float] = None, max_length: Optional[int] = None) -> dict:
+        """Execute a GDB command.
+
+        Args:
+            session_id: Session ID
+            command: GDB command to execute
+            timeout: Command timeout in seconds (None uses default)
+            max_length: Max output length (None uses server default 10000)
+        """
         return self._send_request({
             "cmd": "execute",
             "session_id": session_id,
             "command": command,
             "timeout": timeout or self.timeout,
+            "max_length": max_length,  # Pass None to let server use default
         }, timeout=timeout or self.timeout)
 
     def interrupt(self, session_id: str, timeout: float = 5.0) -> dict:

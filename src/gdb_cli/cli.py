@@ -116,8 +116,9 @@ def terminate(session: str, socket: Optional[str]):
 @click.option("--session", required=True, help="Session ID")
 @click.argument("gdb_command")
 @click.option("--timeout", default=None, type=int, help="Command timeout in seconds")
+@click.option("--max-length", default=None, type=int, help="Max output length (default 10000, truncated if exceeded)")
 @click.option("--socket", default=None, help="Socket path for RPC server")
-def exec_command(session: str, gdb_command: str, timeout: Optional[int], socket: Optional[str]):
+def exec_command(session: str, gdb_command: str, timeout: Optional[int], max_length: Optional[int], socket: Optional[str]):
     """Execute a GDB command."""
     client = get_client(socket)
 
@@ -126,14 +127,23 @@ def exec_command(session: str, gdb_command: str, timeout: Optional[int], socket:
         if gdb_command.strip().lower() == "interrupt":
             result = client.interrupt(session, timeout=timeout or 5)
         else:
-            result = client.execute(session, gdb_command, timeout=timeout)
+            result = client.execute(session, gdb_command, timeout=timeout, max_length=max_length)
 
         if result.get("ok"):
             output_data = result.get("data", {})
             raw_output = output_data.get("output", "")
+            truncated = output_data.get("truncated", False)
+            total_bytes = output_data.get("total_bytes")
 
             # Try to parse output
             parsed = parse_output(gdb_command, raw_output)
+
+            # Add truncation info if present
+            if truncated:
+                parsed["truncated"] = True
+                parsed["total_bytes"] = total_bytes
+                parsed["hint"] = "Output truncated. Use --max-length to increase limit or print specific fields."
+
             output_json(parsed)
         else:
             output_json(result)

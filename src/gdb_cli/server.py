@@ -27,6 +27,9 @@ import pexpect
 DEFAULT_BASE_DIR = Path.home() / ".gdb-cli"
 DEFAULT_SOCKET_NAME = "gdb-cli.sock"
 
+# Default output limits
+DEFAULT_MAX_OUTPUT_LENGTH = 10000
+
 # Strip ANSI escape sequences
 _ANSI_ESCAPE_RE = re.compile(
     r"""
@@ -127,11 +130,14 @@ class GdbSession:
 
         return "Interrupt signal sent"
 
-    def execute(self, command: str, timeout: float = 30.0) -> str:
+    def execute(self, command: str, timeout: float = 30.0, max_length: Optional[int] = None) -> dict:
         """Execute a GDB command and block until prompt returns.
 
         This naturally handles async commands (run, continue) - when
         program stops at breakpoint, GDB prints info and shows prompt.
+
+        Returns:
+            dict with "output" and "truncated" (if output was truncated)
         """
         with self._lock:
             if not self.child.isalive():
@@ -157,7 +163,16 @@ class GdbSession:
             lines = output.splitlines()
             if lines and lines[0].strip() == command.strip():
                 lines = lines[1:]
-            return "\n".join(lines).strip()
+            output = "\n".join(lines).strip()
+
+            # Truncate if needed
+            actual_max_length = max_length or DEFAULT_MAX_OUTPUT_LENGTH
+            if len(output) > actual_max_length:
+                truncated_len = len(output)
+                output = output[:actual_max_length] + f"\n... [TRUNCATED: {truncated_len} bytes total, showing {actual_max_length} bytes]"
+                return {"output": output, "truncated": True, "total_bytes": truncated_len}
+
+            return {"output": output, "truncated": False}
 
     def terminate(self, timeout: float = 5.0) -> None:
         with self._lock:
@@ -260,9 +275,10 @@ class GDBServer:
                 session_id = request.get("session_id")
                 command = request.get("command")
                 timeout = request.get("timeout", 30.0)
+                max_length = request.get("max_length")  # None if not specified
                 session = self._get_session(session_id)
-                output = session.execute(command, timeout=timeout)
-                return {"ok": True, "data": {"output": output}}
+                result = session.execute(command, timeout=timeout, max_length=max_length)
+                return {"ok": True, "data": result}
 
             elif cmd == "interrupt":
                 session_id = request.get("session_id")
