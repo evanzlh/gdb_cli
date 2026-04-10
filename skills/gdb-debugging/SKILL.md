@@ -52,15 +52,15 @@ gdb-cli command --session abc123 "break main"
 gdb-cli command --session abc123 "break critical_function"
 
 # Step 4: Run the program
-gdb-cli command --session abc123 "run" --timeout 60
+gdb-cli command --session abc123 "run"
 # OR use "start" to stop at main automatically:
-# gdb-cli command --session abc123 "start" --timeout 30
+# gdb-cli command --session abc123 "start"
 
 # Step 5: Debug (after breakpoint hit)
 gdb-cli command --session abc123 "bt"           # View call stack
 gdb-cli command --session abc123 "info locals" # View local variables
 gdb-cli command --session abc123 "next"        # Step over
-gdb-cli command --session abc123 "continue" --timeout 60  # Continue
+gdb-cli command --session abc123 "continue"    # Continue
 
 # Step 6: Cleanup
 gdb-cli terminate --session abc123
@@ -69,7 +69,7 @@ gdb-cli terminate --session abc123
 **With command-line arguments**:
 ```bash
 gdb-cli command --session abc123 "set args --config config.json --verbose"
-gdb-cli command --session abc123 "run" --timeout 60
+gdb-cli command --session abc123 "run"
 ```
 
 ---
@@ -146,10 +146,10 @@ gdb-cli command --session abc123 "thread 2"        # Switch thread
 gdb-cli command --session abc123 "bt"              # That thread's backtrace
 
 # Step 5: Continue or control execution
-gdb-cli command --session abc123 "continue" --timeout 60  # Let it run
+gdb-cli command --session abc123 "continue"    # Let it run
 # OR set breakpoints first:
 gdb-cli command --session abc123 "break some_function"
-gdb-cli command --session abc123 "continue" --timeout 60
+gdb-cli command --session abc123 "continue"
 
 # Step 6: Detach (let process continue without GDB)
 gdb-cli command --session abc123 "detach"
@@ -239,10 +239,10 @@ gdb-cli command --session abc123 "thread apply all bt"
 Commands like `run`, `start`, `continue`, `step`, `next` block until:
 - Program hits a breakpoint
 - Program exits
-- Timeout is reached
+- Timeout is reached (default: 30s)
 - User interrupts with `interrupt`
 
-Use `--timeout` to set max wait time (default: 30s).
+Only use `--timeout` when you expect the program to run longer than 30 seconds (e.g., long-running tests, slow startup).
 
 ## Structured Output
 
