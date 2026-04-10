@@ -22,7 +22,7 @@ A GDB debugging tool designed specifically for AI Agents. It wraps GDB with an A
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone https://github.com/evanzlh/gdb_cli.git
 cd gdb-cli
 
 # Install as a system tool
