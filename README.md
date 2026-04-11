@@ -38,6 +38,14 @@ gdb-cli start
 
 Note: The first CLI call will auto-start the `gdb-cli-server` daemon if not running.
 
+## Update
+
+```bash
+cd gdb-cli
+git pull
+uv tool install . --reinstall
+```
+
 ## Uninstallation
 
 ```bash
