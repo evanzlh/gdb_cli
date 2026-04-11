@@ -123,7 +123,11 @@ class GDBClient:
 
     def list_sessions(self) -> dict:
         """List active sessions."""
-        return self._send_request({"cmd": "list_sessions"})
+        return self._send_request({"cmd": "list_sessions"}, timeout=5)
+
+    def shutdown(self) -> dict:
+        """Shutdown the RPC server."""
+        return self._send_request({"cmd": "shutdown"}, timeout=10)
 
 
 def get_client(socket_path: Optional[Path] = None) -> GDBClient:

@@ -200,5 +200,41 @@ def sessions(socket: Optional[str]):
         output_json({"ok": False, "error": str(e)})
 
 
+@main.command()
+@click.option("--socket", default=None, help="Socket path for RPC server")
+@click.option("--force", is_flag=True, default=False, help="Force shutdown without confirmation")
+def shutdown(socket: Optional[str], force: bool):
+    """Shutdown the GDB RPC server daemon.
+
+    This will terminate all active sessions and stop the server.
+    """
+    client = get_client(socket)
+
+    try:
+        # First list sessions to show what will be terminated
+        sessions_result = client.list_sessions()
+        if sessions_result.get("ok"):
+            active_sessions = sessions_result.get("data", {}).get("sessions", [])
+            if active_sessions and not force:
+                session_ids = [s["session_id"] for s in active_sessions]
+                click.echo(f"Warning: {len(active_sessions)} active session(s) will be terminated: {session_ids}")
+                if not click.confirm("Continue with shutdown?"):
+                    output_json({"ok": False, "error": "Shutdown cancelled"})
+                    return
+
+        result = client.shutdown()
+        if result.get("ok"):
+            output_json({
+                "status": "shutdown",
+                "terminated_sessions": result.get("data", {}).get("terminated_sessions", 0),
+            })
+        else:
+            output_json(result)
+            sys.exit(1)
+    except Exception as e:
+        output_json({"ok": False, "error": str(e)})
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()

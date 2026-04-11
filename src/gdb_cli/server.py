@@ -14,6 +14,7 @@ import re
 import signal
 import socket
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -29,6 +30,12 @@ DEFAULT_SOCKET_NAME = "gdb-cli.sock"
 
 # Default output limits
 DEFAULT_MAX_OUTPUT_LENGTH = 10000
+
+# Default idle timeout (60 minutes)
+DEFAULT_IDLE_TIMEOUT = 3600
+
+# Cleanup check interval
+CLEANUP_INTERVAL = 60
 
 # Strip ANSI escape sequences
 _ANSI_ESCAPE_RE = re.compile(
@@ -70,7 +77,16 @@ class GdbSession:
     gdb_path: str = "gdb"
     target: Optional[str] = None
     started_at: datetime = field(default_factory=datetime.now)
+    last_activity_at: datetime = field(default_factory=datetime.now)
     _lock: threading.RLock = field(default_factory=threading.RLock)
+
+    def update_activity(self) -> None:
+        """Update last activity timestamp."""
+        self.last_activity_at = datetime.now()
+
+    def idle_seconds(self) -> float:
+        """Return seconds since last activity."""
+        return (datetime.now() - self.last_activity_at).total_seconds()
 
     @classmethod
     def start(
@@ -124,6 +140,9 @@ class GdbSession:
         if not self.child.isalive():
             raise RuntimeError(f"GDB session {self.session_id} is not alive")
 
+        # Update activity timestamp
+        self.update_activity()
+
         # Send Ctrl+C to GDB - this will interrupt the running program
         # The pending execute() will then receive the prompt
         self.child.sendcontrol('c')
@@ -142,6 +161,9 @@ class GdbSession:
         with self._lock:
             if not self.child.isalive():
                 raise RuntimeError(f"GDB session {self.session_id} is not alive")
+
+            # Update activity timestamp
+            self.update_activity()
 
             self.child.sendline(command)
 
@@ -196,17 +218,20 @@ class GdbSession:
             "gdb_path": self.gdb_path,
             "target": self.target or "No program loaded",
             "alive": self.is_alive(),
+            "idle_seconds": round(self.idle_seconds(), 1),
         }
 
 
 class GDBServer:
     """RPC server that manages GDB sessions."""
 
-    def __init__(self, socket_path: Path):
+    def __init__(self, socket_path: Path, idle_timeout: float = DEFAULT_IDLE_TIMEOUT):
         self.socket_path = socket_path
         self.sessions: dict[str, GdbSession] = {}
         self._lock = threading.RLock()
         self._running = True
+        self.idle_timeout = idle_timeout
+        self._last_cleanup_check = time.time()
 
         # Setup socket
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -226,6 +251,45 @@ class GDBServer:
         print(f"Received signal {signum}, shutting down...")
         self._running = False
         self.terminate_all()
+
+    def _cleanup_idle_sessions(self) -> int:
+        """Terminate sessions that have been idle too long.
+
+        Returns:
+            Number of sessions terminated
+        """
+        terminated_count = 0
+        sessions_to_terminate = []
+
+        with self._lock:
+            for session_id, session in list(self.sessions.items()):
+                if session.idle_seconds() > self.idle_timeout:
+                    sessions_to_terminate.append(session_id)
+
+        # Terminate outside lock to avoid blocking
+        for session_id in sessions_to_terminate:
+            with self._lock:
+                session = self.sessions.pop(session_id, None)
+            if session:
+                try:
+                    session.terminate()
+                    terminated_count += 1
+                    print(f"Terminated idle session {session_id} (idle for {session.idle_seconds():.0f}s)")
+                except Exception as e:
+                    print(f"Error terminating idle session {session_id}: {e}")
+
+        return terminated_count
+
+    def shutdown(self) -> dict:
+        """Gracefully shutdown the server.
+
+        Returns:
+            Summary of shutdown
+        """
+        self._running = False
+        sessions_count = len(self.sessions)
+        self.terminate_all()
+        return {"terminated_sessions": sessions_count, "status": "shutdown_complete"}
 
     def _resolve_gdb_path(self, gdb_path: str) -> str:
         if os.path.sep in gdb_path:
@@ -305,6 +369,10 @@ class GDBServer:
                     sessions = [s.to_dict() for s in self.sessions.values()]
                 return {"ok": True, "data": {"sessions": sessions, "count": len(sessions)}}
 
+            elif cmd == "shutdown":
+                result = self.shutdown()
+                return {"ok": True, "data": result}
+
             else:
                 return {"ok": False, "error": f"Unknown command: {cmd}"}
 
@@ -341,6 +409,7 @@ class GDBServer:
     def run(self) -> None:
         """Main server loop."""
         print(f"GDB RPC server listening on {self.socket_path}")
+        print(f"Idle timeout: {self.idle_timeout}s ({self.idle_timeout/60:.1f} min)")
 
         while self._running:
             try:
@@ -348,6 +417,11 @@ class GDBServer:
                 thread = threading.Thread(target=self._handle_connection, args=(conn,))
                 thread.start()
             except socket.timeout:
+                # Periodic cleanup check
+                now = time.time()
+                if now - self._last_cleanup_check >= CLEANUP_INTERVAL:
+                    self._cleanup_idle_sessions()
+                    self._last_cleanup_check = now
                 continue
             except Exception as e:
                 if self._running:
@@ -371,12 +445,19 @@ def main():
     parser = argparse.ArgumentParser(description="GDB RPC Server Daemon")
     parser.add_argument("--base-dir", default=str(DEFAULT_BASE_DIR), help="Base directory")
     parser.add_argument("--socket", default=None, help="Socket path")
+    parser.add_argument("--idle-timeout", type=int, default=None,
+                        help="Idle timeout in seconds (default: 3600 = 60 min)")
     args = parser.parse_args()
+
+    # Priority: CLI arg > env var > default
+    idle_timeout = args.idle_timeout
+    if idle_timeout is None:
+        idle_timeout = int(os.environ.get("GDB_CLI_IDLE_TIMEOUT", DEFAULT_IDLE_TIMEOUT))
 
     base_dir = Path(args.base_dir)
     socket_path = Path(args.socket) if args.socket else base_dir / DEFAULT_SOCKET_NAME
 
-    server = GDBServer(socket_path)
+    server = GDBServer(socket_path, idle_timeout=idle_timeout)
     server.run()
 
 
