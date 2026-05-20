@@ -1,248 +1,248 @@
-# GDB CLI for AI
+# GDB CLI for AI Agents
 
-A GDB debugging tool designed specifically for AI Agents. It wraps GDB with an Agent-friendly interface through a streamlined CLI command set, outputting structured JSON.
+*Scriptable GDB sessions with structured JSON output for coding agents and automation.*
+
+![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3776AB?style=flat-square&logo=python&logoColor=white)
+![GDB](https://img.shields.io/badge/GDB-%3E%3D9.0-2E3440?style=flat-square)
+![Platform](https://img.shields.io/badge/platform-Linux-3c873a?style=flat-square&logo=linux&logoColor=white)
+![Interface](https://img.shields.io/badge/interface-JSON%20CLI-blue?style=flat-square)
+
+`gdb-cli` wraps GDB in a small, agent-friendly command line interface. It keeps
+debugging sessions alive across separate CLI calls, blocks until GDB returns to a
+prompt, and returns JSON that agents and scripts can consume without scraping an
+interactive terminal.
+
+[Features](#features) - [Quick start](#quick-start) - [Usage](#usage) - [Commands](#commands) - [Architecture](#architecture) - [Agent skill](#agent-skill) - [Development](#development)
 
 ## Features
 
-- **Non-interactive**: All parameters passed via command line, no interactive prompts
-- **Session-based**: Sessions persist across calls via session_id
-- **Structured Output**: JSON format output, common commands auto-parsed
-- **All-Stop Synchronous Blocking Mode**: `continue`, `run`, `step` etc. block until program stops
+- **Persistent sessions** - start a session once, then reuse its `session_id` for
+  later commands.
+- **Structured output** - common GDB commands are parsed into JSON fields such as
+  `frames`, `threads`, `registers`, and `breakpoints`.
+- **Synchronous execution** - `run`, `continue`, `step`, `next`, and similar
+  commands block until the target stops, exits, times out, or is interrupted.
+- **Daemon-backed CLI** - the first CLI call starts `gdb-cli-server` automatically
+  and communicates over a Unix domain socket.
+- **Automation controls** - configurable command timeouts, output truncation, idle
+  session cleanup, and explicit shutdown.
 
-## Requirements
+> [!NOTE]
+> This project is designed for Linux environments where GDB and Unix domain
+> sockets are available.
+
+## Quick start
+
+### Prerequisites
 
 | Dependency | Version |
-|------------|--------|
-| GDB | 9.0+ |
+| --- | --- |
+| Linux | required |
 | Python | 3.10+ |
-| pexpect | 4.0+ |
-| OS | Linux |
+| GDB | 9.0+ |
+| uv | recommended for installation and development |
 
-## Installation
+### Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/evanzlh/gdb_cli.git
-cd gdb-cli
-
-# Install as a system tool
+git clone https://github.com/evanzlh/gdb-for-agent.git
+cd gdb-for-agent
 uv tool install .
 ```
 
-After installation, you can run `gdb-cli` directly from anywhere:
+The `gdb-cli` and `gdb-cli-server` commands will be installed as console scripts.
+The `start` command starts the server daemon automatically if it is not already
+running.
 
 ```bash
 gdb-cli start
-# Output: {"session_id": "abc123", "status": "ready", "working_dir": "/path/to/cwd"}
 ```
 
-Note: The first CLI call will auto-start the `gdb-cli-server` daemon if not running.
+Example response:
 
-## Update
+```json
+{
+  "session_id": "a1b2c3d4",
+  "status": "ready",
+  "working_dir": "/path/to/project"
+}
+```
+
+### Update
 
 ```bash
-cd gdb-cli
 git pull
 uv tool install . --reinstall
 ```
 
-## Uninstallation
+### Uninstall
 
 ```bash
 uv tool uninstall gdb-cli
-
-# Remove session data (optional)
-rm -rf ~/.gdb-cli/
+rm -rf ~/.gdb-cli
 ```
 
-## Commands
+## Usage
 
-### start - Start Session
+### Basic debugging flow
 
 ```bash
+# 1. Start a GDB session
 gdb-cli start
 
-# Returns
-{"session_id": "abc123", "status": "ready", "working_dir": "/path/to/cwd"}
-```
-
-Starts an empty GDB session. Use `command "file <path>"` to load a program.
-
-### terminate - Terminate Session
-
-```bash
-gdb-cli terminate --session <id>
-
-# Returns
-{"session_id": "...", "status": "terminated"}
-```
-
-### command - Execute GDB Command
-
-```bash
-gdb-cli command --session <id> "bt" [--timeout 30]
-
-# Structured parsed output (bt)
-{"frames": [{"num": 0, "function": "main", "file": "main.c", "line": 10}], "truncated": false}
-
-# Raw output (unknown command)
-{"output": "..."}
-```
-
-Execute any GDB command. Common commands:
-- `file <path>` - Load program
-- `attach <pid>` - Attach to process
-- `run` / `start` - Run program
-- `break main` - Set breakpoint
-- `bt` - View call stack
-- `next` / `step` - Single step execution
-- `print var` - Print variable
-- `interrupt` - Interrupt running program
-
-### status - Query Session Status
-
-```bash
-gdb-cli status --session <id>
-
-# Returns
-{"session_id": "...", "state": "alive", "target": "./my_app", "working_dir": "..."}
-```
-
-### sessions - List Sessions
-
-```bash
-gdb-cli sessions
-
-# Returns
-{"sessions": [...], "count": 3}
-```
-
-## Structured Parsed GDB Commands
-
-| GDB Command | Parsed Fields |
-|-------------|---------------|
-| `bt` / `backtrace` | `frames[]` (num, function, file, line, address) |
-| `info threads` | `threads[]` (id, target_id, current, frame, state) |
-| `print` / `p` | `value`, `type`, `var` |
-| `info registers` | `registers[]` (name, value) |
-| `info breakpoints` | `breakpoints[]` (num, type, enabled, address, what) |
-| `info sharedlibrary` | `libraries[]` (name, from, to) |
-| `disassemble` | `instructions[]` (address, offset, asm) |
-| Other commands | `output` (raw text) |
-
-## Usage Examples
-
-### Basic Debug Flow
-
-```bash
-# 1. Start session
-gdb-cli start
-# Output: {"session_id": "a1b2c3d4", "status": "ready", "working_dir": "..."}
-
-# 2. Load program
+# 2. Load a binary
 gdb-cli command --session a1b2c3d4 "file ./my_app"
 
-# 3. Set breakpoint
+# 3. Set a breakpoint and run
 gdb-cli command --session a1b2c3d4 "break main"
-
-# 4. Run program
 gdb-cli command --session a1b2c3d4 "run" --timeout 30
-# Output: {"output": "Breakpoint 1, main () at ..."}
 
-# 5. View call stack
+# 4. Inspect state
 gdb-cli command --session a1b2c3d4 "bt"
-# Output: {"frames": [{"num": 0, "function": "main", ...}], "truncated": false}
-
-# 6. Single step
-gdb-cli command --session a1b2c3d4 "next" --timeout 5
-
-# 7. Print variable
+gdb-cli command --session a1b2c3d4 "info locals"
 gdb-cli command --session a1b2c3d4 "print argc"
-# Output: {"var": "$1", "value": "1"}
 
-# 8. Terminate session
+# 5. Clean up
 gdb-cli terminate --session a1b2c3d4
 ```
 
-### Attach to Running Process
+Parsed commands return structured JSON when possible:
+
+```json
+{
+  "frames": [
+    {
+      "num": 0,
+      "function": "main",
+      "file": "main.c",
+      "line": 10
+    }
+  ],
+  "truncated": false
+}
+```
+
+### Attach to a running process
 
 ```bash
 gdb-cli start
-# Output: {"session_id": "abc123", ...}
-
-gdb-cli command --session abc123 "attach 12345"
-gdb-cli command --session abc123 "bt"
-gdb-cli terminate --session abc123
+gdb-cli command --session a1b2c3d4 "attach 12345"
+gdb-cli command --session a1b2c3d4 "info threads"
+gdb-cli command --session a1b2c3d4 "bt"
+gdb-cli command --session a1b2c3d4 "detach"
+gdb-cli terminate --session a1b2c3d4
 ```
+
+> [!TIP]
+> If a command is expected to run for a while, pass `--timeout <seconds>`.
+> If it runs longer than expected, interrupt it with:
+>
+> ```bash
+> gdb-cli command --session a1b2c3d4 "interrupt"
+> ```
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `gdb-cli start` | Start a new GDB session |
+| `gdb-cli command --session <id> "<cmd>"` | Execute any GDB command |
+| `gdb-cli status --session <id>` | Query one session |
+| `gdb-cli sessions` | List active sessions |
+| `gdb-cli terminate --session <id>` | Terminate one session |
+| `gdb-cli shutdown --force` | Stop the daemon and terminate active sessions |
+
+The default runtime directory and Unix socket live under `~/.gdb-cli/`.
+
+### Structured output
+
+| GDB command | Parsed output |
+| --- | --- |
+| `bt`, `backtrace`, `where` | `frames[]` with `num`, `function`, `file`, `line`, `address` |
+| `info threads` | `threads[]` with `id`, `target_id`, `current`, `frame`, `state` |
+| `print`, `p` | `var`, `value`, `type`, or raw `output` for GDB messages |
+| `info registers` | `registers[]` with `name`, `value`, `raw_value` |
+| `info breakpoints` | `breakpoints[]` with `num`, `type`, `enabled`, `address`, `what` |
+| `info sharedlibrary` | `libraries[]` with `name`, `from`, `to`, `syms_read` |
+| `disassemble` | `instructions[]` with `address`, `offset`, `asm` |
+| Other commands | raw `output` |
+
+By default, command output is capped at 10,000 characters. Use `--max-length` to
+increase the limit when you need larger dumps.
+
+> [!IMPORTANT]
+> Do not send concurrent commands to the same session. Each session owns one GDB
+> process and commands are handled synchronously. Create separate sessions for
+> parallel debugging. The supported exception is `interrupt`, which is intended
+> to stop a blocking command.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                     AI Agent                             │
-└─────────────────────────┬───────────────────────────────┘
-                          │ CLI Commands
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│                    CLI Layer                             │
-│  start / terminate / command / status / sessions        │
-│                          │                               │
-│                          ▼                               │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │              GDBClient (client.py)                 │ │
-│  │  - Unix Domain Socket communication                │ │
-│  │  - JSON-RPC protocol                               │ │
-│  └───────────────────────────────────────────────────┘ │
-└─────────────────────────┬───────────────────────────────┘
-                          │ Unix Socket
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│            GDB Server Daemon (server.py)                 │
-│  - Session management (in-memory)                       │
-│  - pexpect spawn for GDB process                        │
-│  - Async command blocking via prompt detection          │
-│  - Interrupt support via Ctrl+C                         │
-└─────────────────────────┬───────────────────────────────┘
-                          │ pexpect
-                          ▼
-┌─────────────────────────────────────────────────────────┐
-│                     GDB Process                          │
-└─────────────────────────────────────────────────────────┘
+```text
+AI agent / script
+      |
+      | gdb-cli start|command|status|sessions|terminate
+      v
+CLI layer
+      |
+      | JSON over Unix domain socket
+      v
+gdb-cli-server daemon
+      |
+      | pexpect
+      v
+GDB process
+      |
+      v
+Target program
 ```
 
-### Key Design: pexpect Blocking
+The daemon owns session state in memory and starts GDB with:
 
-For async commands (run, continue, step), the server uses `expect_exact("(gdb)")` to block until GDB returns to the prompt. This naturally captures all output including breakpoint hit information.
+- `--quiet --nx`
+- `set pagination off`
+- `set confirm off`
+- `TERM=dumb`
 
-## Testing
+Idle sessions are cleaned up after 60 minutes by default. Configure this with
+`GDB_CLI_IDLE_TIMEOUT` or `gdb-cli-server --idle-timeout <seconds>`.
 
-```bash
-# Run all tests
-uv run pytest tests/ -v
+## Agent skill
 
-# Run specific test
-uv run pytest tests/test_e2e.py -v
-```
+The repository includes a skill that teaches compatible agents how to use the CLI
+for common debugging scenarios:
 
-## Agent Skill
-
-This project includes an Agent Skill file to guide AI Agents in using gdb-cli:
-
-```
+```text
 skills/gdb-debugging/SKILL.md
+skills/gdb-debugging/references/commands.md
 ```
 
-### Usage
+Use it when an agent needs to debug C/C++ programs, inspect crashes, attach to a
+running process, or analyze a core dump through `gdb-cli`.
 
-Copy the skill to your Agent's skills directory:
+## Development
+
+Install dependencies:
+
 ```bash
-# Claude Code
-cp skills/gdb-debugging/SKILL.md ~/.claude/skills/
-
-# Or use within project
-# Agent will auto-load skills/ from project directory
+uv sync
 ```
 
-## License
+Run tests:
 
-MIT License
+```bash
+uv run pytest tests/ -v
+```
+
+The integration tests start `gdb-cli-server`, compile small test binaries, and
+exercise real GDB sessions. They require GDB and a working C/C++ compiler.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `Failed to start GDB RPC server` | Confirm `gdb-cli-server` is installed and available in `PATH` |
+| `GDB not found in PATH` | Install GDB or make sure `gdb` is available in `PATH` before starting sessions |
+| Command timed out | Increase `--timeout` or run `gdb-cli command --session <id> "interrupt"` |
+| Attach is denied | Check Linux ptrace permissions, such as `/proc/sys/kernel/yama/ptrace_scope` |
+| Output is truncated | Re-run with a larger `--max-length` or inspect a narrower expression |
