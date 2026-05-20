@@ -1,11 +1,19 @@
-# GDB CLI for AI Agents
+<p align="center">
+  <img src="docs/assets/gdb-cli-icon.png" alt="GDB CLI for AI Agents icon" width="144">
+</p>
 
-*Scriptable GDB sessions with structured JSON output for coding agents and automation.*
+<h1 align="center">GDB CLI for AI Agents</h1>
 
-![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3776AB?style=flat-square&logo=python&logoColor=white)
-![GDB](https://img.shields.io/badge/GDB-%3E%3D9.0-2E3440?style=flat-square)
-![Platform](https://img.shields.io/badge/platform-Linux-3c873a?style=flat-square&logo=linux&logoColor=white)
-![Interface](https://img.shields.io/badge/interface-JSON%20CLI-blue?style=flat-square)
+<p align="center">
+  <em>Scriptable GDB sessions with structured JSON output for coding agents and automation.</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-%3E%3D3.10-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python >= 3.10">
+  <img src="https://img.shields.io/badge/GDB-%3E%3D9.0-2E3440?style=flat-square" alt="GDB >= 9.0">
+  <img src="https://img.shields.io/badge/platform-Linux-3c873a?style=flat-square&logo=linux&logoColor=white" alt="Linux">
+  <img src="https://img.shields.io/badge/interface-JSON%20CLI-blue?style=flat-square" alt="JSON CLI">
+</p>
 
 `gdb-cli` wraps GDB in a small, agent-friendly command line interface. It keeps
 debugging sessions alive across separate CLI calls, blocks until GDB returns to a
